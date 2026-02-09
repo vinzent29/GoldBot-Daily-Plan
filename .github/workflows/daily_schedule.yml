@@ -1,0 +1,32 @@
+name: Daily Gold Plan (05:30 PM Thai)
+
+on:
+  schedule:
+    # ตั้งเวลา Cron Job (เวลา UTC)
+    # 00:00 UTC = 07:00 โมงเช้าประเทศไทย
+    - cron: '0 0 * * *'
+  workflow_dispatch: # ปุ่มสำหรับกดรันมือ (เผื่อเทส)
+
+jobs:
+  run-plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install libraries
+        run: pip install -r requirements.txt
+
+      - name: Run Python Script
+        env: # ไขกุญแจส่งให้ Python
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python daily_gold_plan.py
