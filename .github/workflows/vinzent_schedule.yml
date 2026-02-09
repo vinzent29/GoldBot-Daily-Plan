@@ -1,0 +1,28 @@
+name: VinzentNews (Runs Every 5 Mins)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # นี่คือคำสั่งรันทุก 5 นาที
+  workflow_dispatch:       # ปุ่มกดรันมือ
+
+jobs:
+  check-news-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install libraries
+        run: pip install -r requirements.txt
+
+      - name: Run VinzentNews Script
+        env: # ใช้กุญแจชุดเดิมในตู้เซฟ
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python vinzent_news.py
