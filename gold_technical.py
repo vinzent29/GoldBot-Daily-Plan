@@ -1,137 +1,122 @@
 import os
-import requests
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
-import google.generativeai as genai
+import requests
 
 # ================= 🔐 ดึง Key จาก GitHub Secrets =================
+# ระบบจะดึงจากตู้เซฟ Secrets อัตโนมัติ
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# ตั้งค่า AI
-try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-except:
-    pass
+# สัญลักษณ์ทองคำ (Gold Futures)
+SYMBOL = "GC=F"
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'HTML'}
+    payload = {
+        'chat_id': CHAT_ID, 
+        'text': message, 
+        'parse_mode': 'HTML'
+    }
     try:
-        requests.post(url, json=payload)
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            print(f"❌ Telegram Error: {response.text}")
     except Exception as e:
         print(f"❌ Error sending msg: {e}")
 
-def get_data():
-    # ดึงกราฟทองคำรายชั่วโมง (1h) ย้อนหลัง 7 วัน
-    df = yf.download("XAUUSD=X", period="7d", interval="1h", progress=False)
-    if df.empty: return None
-    
-    # คำนวณอินดิเคเตอร์พื้นฐาน
-    df['RSI'] = df.ta.rsi(length=14)
-    df.ta.macd(append=True) # ได้ MACD_12_26_9, MACDh, MACDs
-    df['EMA_200'] = df.ta.ema(length=200)
-    
-    # 🌟 1. คำนวณความผันผวน (ATR) สำหรับสายซิ่ง
-    df['ATR'] = df.ta.atr(length=14)
-    
-    # 🌟 2. คำนวณ Swing High/Low ย้อนหลัง 20 แท่ง สำหรับสายโครงสร้าง
-    df['Swing_High'] = df['High'].rolling(window=20).max()
-    df['Swing_Low'] = df['Low'].rolling(window=20).min()
-    
-    return df.iloc[-1] # ส่งคืนแท่งล่าสุด
-
-def analyze_market():
-    print("📈 Technical Analyst เริ่มทำงาน...")
-    
-    data = get_data()
-    if data is None:
-        print("❌ ดึงข้อมูลกราฟไม่ได้")
-        return
-
-    close_price = data['Close']
-    rsi = data['RSI']
-    macd_line = data['MACD_12_26_9']
-    signal_line = data['MACDs_12_26_9']
-    ema_200 = data['EMA_200']
-    atr = data['ATR']
-    swing_high = data['Swing_High']
-    swing_low = data['Swing_Low']
-
-    # --- คำนวณจุด TP/SL ทั้ง 2 แบบ (ล่วงหน้า) ---
-    
-    # แบบที่ 1: สาย Volatility (ATR)
-    # สมมติถ้าเล่น Buy
-    buy_sl_atr = close_price - (atr * 2) 
-    buy_tp_atr = close_price + (atr * 3)
-    # สมมติถ้าเล่น Sell
-    sell_sl_atr = close_price + (atr * 2)
-    sell_tp_atr = close_price - (atr * 3)
-
-    # แบบที่ 2: สาย Structure (Swing High/Low)
-    # สมมติถ้าเล่น Buy (SL ที่โลว์เดิม)
-    buy_sl_swing = swing_low
-    buy_tp_swing = close_price + (close_price - swing_low) * 2 # RR 1:2
-    # สมมติถ้าเล่น Sell (SL ที่ไฮเดิม)
-    sell_sl_swing = swing_high
-    sell_tp_swing = close_price - (swing_high - close_price) * 2 # RR 1:2
-
-    # สร้าง Prompt ให้ AI
-    prompt = f"""
-    คุณคือผู้เชี่ยวชาญด้าน Technical Analysis ของทองคำ (XAUUSD)
-    
-    ข้อมูลตลาดล่าสุด (Timeframe 1H):
-    - ราคาปัจจุบัน: {close_price:.2f}
-    - RSI (14): {rsi:.2f}
-    - MACD Line: {macd_line:.4f} / Signal Line: {signal_line:.4f}
-    - EMA 200: {ema_200:.2f} (เทรนด์หลัก: {"ขาขึ้น" if close_price > ema_200 else "ขาลง"})
-    
-    แผนสำรองที่เตรียมไว้ (Strategic Plan):
-    1. แผน ATR (ตามความผันผวน):
-       - ถ้า BUY: SL={buy_sl_atr:.2f}, TP={buy_tp_atr:.2f}
-       - ถ้า SELL: SL={sell_sl_atr:.2f}, TP={sell_tp_atr:.2f}
-       
-    2. แผน Swing Structure (ตามแนวรับต้าน):
-       - Swing High ล่าสุด: {swing_high:.2f}
-       - Swing Low ล่าสุด: {swing_low:.2f}
-
-    คำสั่ง:
-    1. วิเคราะห์แนวโน้มปัจจุบัน (Trend & Momentum) ว่าควร Wait, Buy หรือ Sell
-    2. แนะนำ "Setup ที่ดีที่สุด" โดยเลือกตัวเลขจากแผน ATR หรือ Swing มาผสมกันตามความเหมาะสม
-    3. ระบุเหตุผลสั้นๆ เช่น "ใช้ SL แบบ Swing เพราะปลอดภัยกว่า" หรือ "ใช้แบบ ATR เพราะตลาดผันผวน"
-    4. สรุปเป็นข้อความสั้นๆ ภาษาไทย เข้าใจง่าย ใส่ Emoji
-    """
+def check_technical():
+    print(f"📈 กำลังดึงกราฟ {SYMBOL} (Timeframe 1H)...")
     
     try:
-        response = model.generate_content(prompt)
-        ai_analysis = response.text
+        # 1. ดึงข้อมูลย้อนหลัง 5 วัน
+        df = yf.download(SYMBOL, period="5d", interval="1h", progress=False)
         
-        # ส่งเข้า Telegram
+        if df.empty:
+            print("❌ ไม่พบข้อมูลราคา (Yahoo Finance อาจมีปัญหา)")
+            return
+
+        # 🛠️ [IMPORTANT] แก้บั๊ก yfinance คืนค่าตารางซ้อน (MultiIndex)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+            
+    except Exception as e:
+        print(f"❌ Error downloading data: {e}")
+        return
+
+    # 2. คำนวณ Indicators
+    # RSI (14)
+    df['RSI'] = ta.rsi(df['Close'], length=14)
+    
+    # MACD (12, 26, 9)
+    macd_df = ta.macd(df['Close'], fast=12, slow=26, signal=9)
+    df = pd.concat([df, macd_df], axis=1)
+    
+    # EMA (50)
+    df['EMA_50'] = ta.ema(df['Close'], length=50)
+
+    # 3. ดึงค่าแท่งล่าสุด (Real-time)
+    try:
+        last_bar = df.iloc[-1]
+        
+        # แปลงค่าเป็นตัวเลข (Float) ให้ชัวร์
+        curr_price = float(last_bar['Close'])
+        rsi_val = float(last_bar['RSI'])
+        macd_val = float(last_bar['MACD_12_26_9'])
+        macd_signal = float(last_bar['MACDs_12_26_9'])
+        ema_50 = float(last_bar['EMA_50'])
+    except Exception as e:
+        print(f"❌ Error parsing data: {e}")
+        return
+
+    # 4. วิเคราะห์สัญญาณ (Signal Logic)
+    signals = []
+    
+    # --- เงื่อนไข RSI ---
+    if rsi_val > 70:
+        signals.append(f"⚠️ <b>RSI Overbought</b> ({rsi_val:.1f}) ระวังโดนทุบ!")
+    elif rsi_val < 30:
+        signals.append(f"✅ <b>RSI Oversold</b> ({rsi_val:.1f}) ราคาน่าจะดีด!")
+
+    # --- เงื่อนไข MACD Cross ---
+    # เทียบกับแท่งก่อนหน้า (Previous Bar)
+    prev_bar = df.iloc[-2]
+    prev_macd = float(prev_bar['MACD_12_26_9'])
+    prev_signal = float(prev_bar['MACDs_12_26_9'])
+
+    if prev_macd < prev_signal and macd_val > macd_signal:
+        signals.append("🚀 <b>MACD Golden Cross</b> (ตัดขึ้น)")
+    elif prev_macd > prev_signal and macd_val < macd_signal:
+        signals.append("🔻 <b>MACD Death Cross</b> (ตัดลง)")
+
+    # --- เช็ค Trend ---
+    trend = "ขาขึ้น 🐂" if curr_price > ema_50 else "ขาลง 🐻"
+
+    # 5. ส่งแจ้งเตือน (เฉพาะเมื่อเจอสัญญาณ)
+    if signals:
+        print(f"🔔 เจอ {len(signals)} สัญญาณ! กำลังส่ง Telegram...")
+        
+        msg_body = "\n".join([f"- {s}" for s in signals])
         msg = f"""
-📈 <b>Technical Analyst (1H)</b>
-💰 ราคา: <b>{close_price:.2f}</b>
+📈 <b>Gold Technical Alert</b>
 ➖➖➖➖➖➖➖➖
+💰 <b>ราคา:</b> ${curr_price:.2f}
+🧭 <b>เทรนด์:</b> {trend} (EMA50)
+
+⚡ <b>สัญญาณที่พบ:</b>
+{msg_body}
+
 📊 <b>Indicators:</b>
-• RSI: {rsi:.1f}
-• MACD: {macd_line:.2f} / {signal_line:.2f}
-• Trend: {"🟢 Bullish" if close_price > ema_200 else "🔴 Bearish"}
-
-🧠 <b>AI Strategy:</b>
-{ai_analysis}
-
-⚠️ <i>(การลงทุนมีความเสี่ยง โปรดใช้วิจารณญาณ)</i>
+RSI: {rsi_val:.1f} | MACD: {macd_val:.2f}
 """
         send_telegram(msg)
-        print("✅ ส่งวิเคราะห์เรียบร้อย")
-        
-    except Exception as e:
-        print(f"❌ AI Error: {e}")
+    else:
+        # Log ไว้ดูใน GitHub Actions (แต่ไม่ส่งเข้ามือถือ)
+        print(f"💤 กราฟนิ่งๆ (Price=${curr_price:.2f}, RSI={rsi_val:.1f})")
 
 if __name__ == "__main__":
-    if TELEGRAM_TOKEN:
-        analyze_market()
+    if TELEGRAM_TOKEN and CHAT_ID:
+        check_technical()
     else:
-        print("❌ ไม่พบ Key")
+        print("❌ ไม่พบ Key (โปรดตั้งค่า Secrets ใน GitHub)")
