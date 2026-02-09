@@ -1,0 +1,29 @@
+name: Gold Technical Analysis (Hourly)
+
+on:
+  schedule:
+    # รันทุกชั่วโมง ที่นาทีที่ 5 (เช่น 09:05, 10:05, 11:05)
+    # เพื่อให้กราฟแท่ง 1 ชั่วโมง (H1) ปิดจบแท่งเรียบร้อยก่อนค่อยเช็ค
+    - cron: '5 * * * *'
+  workflow_dispatch: # ปุ่มกดรันมือ
+
+jobs:
+  technical-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install libraries
+        run: pip install -r requirements.txt
+
+      - name: Run Technical Script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python gold_technical.py
