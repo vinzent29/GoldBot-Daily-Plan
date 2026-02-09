@@ -1,11 +1,13 @@
-name: Daily Gold Plan (05:30 AM Thai)
+name: Daily Gold Plan (05:30 & 12:00 Thai)
 
 on:
   schedule:
-    # ตั้งเวลา Cron Job (เวลา UTC)
-    # 00:00 UTC = 07:00 โมงเช้าประเทศไทย
-    - cron: '0 0 * * *'
-  workflow_dispatch: # ปุ่มสำหรับกดรันมือ (เผื่อเทส)
+    # รอบเช้า: 05:30 น. ไทย (คือ 22:30 UTC)
+    - cron: '30 22 * * *'  
+    # รอบเที่ยง: 12:00 น. ไทย (คือ 05:00 UTC)
+    - cron: '0 5 * * *'
+
+  workflow_dispatch: # ปุ่มกดรันมือ
 
 jobs:
   run-plan:
