@@ -4,4 +4,5 @@ google-generativeai
 python-dateutil
 yfinance
 pandas
-pandas_ta
+pandas-ta
+
