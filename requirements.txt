@@ -5,3 +5,4 @@ python-dateutil
 yfinance
 pandas
 pandas-ta
+youtube-transcript-api
