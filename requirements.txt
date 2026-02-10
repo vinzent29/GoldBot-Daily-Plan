@@ -6,3 +6,4 @@ yfinance
 pandas
 pandas-ta
 youtube-transcript-api
+pytz
