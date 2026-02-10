@@ -14,7 +14,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 try:
     if GEMINI_API_KEY:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
 except:
     pass
 
@@ -122,3 +122,4 @@ if __name__ == "__main__":
         analyze_plan()
     else:
         print("❌ ไม่พบ Key")
+
